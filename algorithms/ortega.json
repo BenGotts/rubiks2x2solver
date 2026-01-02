@@ -1,0 +1,39 @@
+{
+  "method": "ortega",
+  "name": "Ortega Method",
+  "description": "Fast 2-look last layer method: solve one face, then OLL + PBL",
+  "steps": [
+    {
+      "name": "face",
+      "description": "Solve any face (intuitive)",
+      "algorithms": {}
+    },
+    {
+      "name": "oll",
+      "description": "Orient Last Layer",
+      "algorithms": {
+        "Sune": "R U R' U R U2 R'",
+        "Antisune": "R U2 R' U' R U' R'",
+        "Pi": "F R U R' U' R U R' U' F'",
+        "T": "R U R' U' R' F R F'",
+        "L": "F R U' R' U' R U R' F'",
+        "U": "F R U R' U' F'",
+        "H": "R2 U2 R U2 R2"
+      }
+    },
+    {
+      "name": "pbl",
+      "description": "Permute Both Layers",
+      "algorithms": {
+        "AdjAdj": "R2 U' R2 U2 F2 U' R2",
+        "AdjDiag": "R U' R F2 R' U R'",
+        "DiagAdj": "x2 R U' R F2 R' U R'",
+        "DiagDiag": "R2 F2 R2",
+        "AdjSolved": "R U R' U' R' F R2 U' R' U' R U R' F'",
+        "DiagSolved": "F R U' R' U' R U R' F' R U R' U' R' F R F'",
+        "SolvedAdj": "x2 R U R' U' R' F R2 U' R' U' R U R' F'",
+        "SolvedDiag": "x2 F R U' R' U' R U R' F' R U R' U' R' F R F'"
+      }
+    }
+  ]
+}

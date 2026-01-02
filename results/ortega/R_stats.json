@@ -1,0 +1,30 @@
+{
+  "color": "R",
+  "processed_states": 3674160,
+  "avg_total_moves": 21.96164429420602,
+  "std_total_moves": 4.346247023081261,
+  "min_total_moves": 0,
+  "max_total_moves": 34,
+  "avg_optimal_moves": 8.755576240555664,
+  "avg_efficiency_gap": 13.206068053650359,
+  "step_breakdown": {
+    "face": {
+      "avg": 3.9735449735449735,
+      "std": 0.8049704219736974,
+      "min": 0,
+      "max": 5
+    },
+    "oll": {
+      "avg": 8.125574280924075,
+      "std": 2.129132072481709,
+      "min": 0,
+      "max": 11
+    },
+    "pbl": {
+      "avg": 9.862525039736974,
+      "std": 3.6815080706016947,
+      "min": 0,
+      "max": 18
+    }
+  }
+}

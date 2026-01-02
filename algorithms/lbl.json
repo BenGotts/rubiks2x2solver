@@ -1,0 +1,33 @@
+{
+  "method": "lbl",
+  "name": "Layer-By-Layer (Beginner Method)",
+  "description": "Beginner-friendly method: solve first layer, then OLL and PLL",
+  "steps": [
+    {
+      "name": "layer",
+      "description": "Solve first layer completely (intuitive)",
+      "algorithms": {}
+    },
+    {
+      "name": "oll",
+      "description": "Orient Last Layer",
+      "algorithms": {
+        "Sune": "R U R' U R U2 R'",
+        "AntiSune": "R U2 R' U' R U' R'",
+        "Pi": "R U2 R2 U' R2 U' R2 U2 R",
+        "T": "R U R' U' R' F R F'",
+        "L": "F R U' R' U' R U R' F'",
+        "U": "F R U R' U' F'",
+        "H": "R2 U2 R U2 R2"
+      }
+    },
+    {
+      "name": "pll",
+      "description": "Permute Last Layer",
+      "algorithms": {
+        "T_PERM": "R U R' U' R' F R2 U' R' U' R U R' F'",
+        "Y_PERM": "F R U' R' U' R U R' F' R U R' U' R' F R F'"
+      }
+    }
+  ]
+}

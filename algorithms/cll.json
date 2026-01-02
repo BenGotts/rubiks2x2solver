@@ -1,0 +1,60 @@
+{
+  "method": "cll",
+  "name": "CLL (Corners of Last Layer)",
+  "description": "Layer-first method: solve first layer, then CLL to finish",
+  "steps": [
+    {
+      "name": "layer",
+      "description": "Solve first layer completely (intuitive)",
+      "algorithms": {}
+    },
+    {
+      "name": "cll",
+      "description": "Corners of Last Layer - solve all remaining corners",
+      "algorithms": {
+        "AS1": "L' U' L U' L' U2 L",
+        "AS2": "L' U' L U L F' L' F L' U' L U' L' U2 L",
+        "AS3": "F' L F L' U2 L' U2 L",
+        "AS4": "R U2 R' U2 R' F R F'",
+        "AS5": "R' F R F' R U R'",
+        "AS6": "R' U R U' R2 F R F' R U R' U' R",
+        "H1": "R2 U2 R' U2 R2",
+        "H2": "F R2 U' R2 U' R2 U R2 F'",
+        "H3": "R U R' U R U R' F R' F' R",
+        "H4": "x' U2 R U2 R2 F2 R U2 x",
+        "L1": "R' U R' U2 R U' R' U R U' R2",
+        "L2": "R U2 R2 F2 R U R' F2 R F'",
+        "L3": "R U2 R' F' R U2 R' U R' F2 R",
+        "L4": "F R' F' R U R U' R'",
+        "L5": "F R U' R' U' R U R' F'",
+        "L6": "R U2 R2 F R F' R U2 R'",
+        "Adj": "R U R' U' R' F R2 U' R' U' R U R' F'",
+        "Diag": "F R U' R' U' R U R' F' R U R' U' R' F R F'",
+        "P1": "R U' R2 U R2 U R2 U' R",
+        "P2": "R' F2 R F' U2 R U' R' U' F",
+        "P3": "F R2 U' R2 U R2 U R2 F'",
+        "P4": "R U2 R' U' R U R' U2 R' F R F'",
+        "P5": "R U' R' F R' F R U R' F R",
+        "P6": "R' U' R' F R F' R U' R' U2 R",
+        "S1": "R U R' U R U2 R'",
+        "S2": "L' U2 L U2 L F' L' F",
+        "S3": "F R' F' R U2 R U2 R'",
+        "S4": "R U R' U' R' F R F' R U R' U R U2 R'",
+        "S5": "L F' L' F L' U' L",
+        "S6": "R U R' U R' F R F' R U2 R'",
+        "T1": "R' U R U2 R2 F' R U' R' F2 R2",
+        "T2": "R' U R U2 R2 F R F' R",
+        "T3": "L' U' L U L F' L' F",
+        "T4": "F R U R' U' R U' R' U' R U R' F'",
+        "T5": "R U R' U' R' F R F'",
+        "T6": "F U' R U2 R' U' F2 R U R'",
+        "U1": "R2 F2 R U R' F R2 U2 R' U' R",
+        "U2": "R U2 R U' R' F R' F2 U' F",
+        "U3": "R' U R' F R F' R U2 R' U R",
+        "U4": "F R' F' R U' R U' R' U2 R U' R'",
+        "U5": "R U' R2 F R F' R U R' U' R U R'",
+        "U6": "F R U R' U' F'"
+      }
+    }
+  ]
+}

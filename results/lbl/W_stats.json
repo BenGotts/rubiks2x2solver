@@ -1,0 +1,30 @@
+{
+  "color": "W",
+  "processed_states": 3674160,
+  "avg_total_moves": 26.436885709930976,
+  "std_total_moves": 6.174938582721535,
+  "min_total_moves": 0,
+  "max_total_moves": 35,
+  "avg_optimal_moves": 8.755576240555664,
+  "avg_efficiency_gap": 17.681309469375314,
+  "step_breakdown": {
+    "layer": {
+      "avg": 5.122460099723474,
+      "std": 0.867670733458976,
+      "min": 0,
+      "max": 7
+    },
+    "oll": {
+      "avg": 8.102006717181615,
+      "std": 1.4605590132757673,
+      "min": 0,
+      "max": 10
+    },
+    "pll": {
+      "avg": 13.21241889302589,
+      "std": 5.893345834153449,
+      "min": 0,
+      "max": 18
+    }
+  }
+}

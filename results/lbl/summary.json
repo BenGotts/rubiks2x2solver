@@ -1,0 +1,44 @@
+{
+  "method": "lbl",
+  "colors": [
+    "R",
+    "B",
+    "O",
+    "G",
+    "W",
+    "Y"
+  ],
+  "failures": 0,
+  "per_color_stats": {
+    "B": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.58410738781109,
+      "avg_efficiency_gap": 17.828531147255426
+    },
+    "G": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.633823241230647,
+      "avg_efficiency_gap": 17.878247000674985
+    },
+    "O": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.560470964791953,
+      "avg_efficiency_gap": 17.804894724236288
+    },
+    "R": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.653378459294096,
+      "avg_efficiency_gap": 17.897802218738434
+    },
+    "W": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.436885709930976,
+      "avg_efficiency_gap": 17.681309469375314
+    },
+    "Y": {
+      "processed_states": 3674160,
+      "avg_total_moves": 26.20563502950334,
+      "avg_efficiency_gap": 17.45005878894768
+    }
+  }
+}
