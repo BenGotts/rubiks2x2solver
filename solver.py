@@ -11,6 +11,16 @@ from abc import ABC, abstractmethod
 import pocket_cube
 
 # ==========================================
+# DEFAULTS
+# ==========================================
+
+DEFAULT_DIST_NPY='pocket2x2_depths_htm_modrot.npy'
+DEFAULT_TRANSITION_NPY='pocket2x2_transitions.npy'
+DEFAULT_OUTPUT_DIR='results'
+DEFAULT_METHODS=['all']
+DEFAULT_LOG_INTERVAL=250000
+
+# ==========================================
 # JIT COMPILED BFS KERNELS
 # ==========================================
 
@@ -286,7 +296,7 @@ class Solver(pocket_cube.PocketCube, ABC):
 # GLOBAL SOLVER & EXECUTION
 # ==========================================
 
-def get_or_create_global_transitions(max_states: int, moves: List[str], log_interval: int, transition_file: str) -> np.ndarray:
+def get_or_create_global_transitions(max_states: int, moves: List[str], log_interval: int = DEFAULT_LOG_INTERVAL, transition_file: str = DEFAULT_TRANSITION_NPY) -> np.ndarray:
     path = Path(transition_file)
     if path.exists():
         print(f"\n[SOLVER] Loading existing global state transitions from {transition_file}...")
@@ -323,7 +333,7 @@ def get_or_create_global_transitions(max_states: int, moves: List[str], log_inte
     np.save(path, transitions)
     return transitions
 
-def get_or_create_optimal_distances(transitions: np.ndarray, max_states: int, dist_file: str) -> np.ndarray:
+def get_or_create_optimal_distances(transitions: np.ndarray, max_states: int, dist_file: str = DEFAULT_DIST_NPY) -> np.ndarray:
     path = Path(dist_file)
     if path.exists():
         print(f"\n[SOLVER] Loading existing optimal distances from {dist_file}")
@@ -360,11 +370,11 @@ def load_solver(method: str) -> Solver:
 
 def main():
     parser = argparse.ArgumentParser(description='2x2x2 Rubik\'s Cube Solver')
-    parser.add_argument('--dist-npy', default='pocket2x2_depths_htm_modrot.npy', help='Optimal distances file')
-    parser.add_argument('--transition-npy', default='pocket2x2_transitions.npy', help='State transitions cache file')
-    parser.add_argument('--output-dir', default='results', help='Directory to save analysis results')
-    parser.add_argument('--methods', nargs='+', choices=['ortega', 'cll', 'lbl', 'eg', 'all'], default=['all'])
-    parser.add_argument('--log-interval', type=int, default=250000, help='Log interval for long operations')
+    parser.add_argument('--dist-npy', default=DEFAULT_DIST_NPY, help='Optimal distances file')
+    parser.add_argument('--transition-npy', default=DEFAULT_TRANSITION_NPY, help='State transitions cache file')
+    parser.add_argument('--output-dir', default=DEFAULT_OUTPUT_DIR, help='Directory to save analysis results')
+    parser.add_argument('--methods', nargs='+', choices=['ortega', 'cll', 'lbl', 'eg', 'all'], default=DEFAULT_METHODS)
+    parser.add_argument('--log-interval', type=int, default=DEFAULT_LOG_INTERVAL, help='Log interval for long operations')
     parser.add_argument('--force', action='store_true', help='Force recalculation even if method .npy files exist')
     args = parser.parse_args()
     
