@@ -1,5 +1,7 @@
 import argparse
 import json
+import logging
+import sys
 import numpy as np
 import signal
 import time
@@ -9,6 +11,9 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 
 import pocket_cube
+
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+logger = logging.getLogger(__name__)
 
 # ==========================================
 # DEFAULTS
@@ -27,10 +32,10 @@ DEFAULT_LOG_INTERVAL=250000
 try:
     from numba import jit
     NUMBA_AVAILABLE = True
-    print("✓ Numba JIT compiler available - using optimized code paths")
+    logger.info("✓ Numba JIT compiler available - using optimized code paths")
 except ImportError:
     NUMBA_AVAILABLE = False
-    print("⚠ Numba not available - using standard Python (slower)")
+    logger.warning("⚠ Numba not available - using standard Python (slower)")
     def jit(*args, **kwargs):
         def decorator(func): return func
         return decorator
@@ -206,17 +211,17 @@ class Solver(pocket_cube.PocketCube, ABC):
         failed_states = []
         interrupted = [False]
 
-        def signal_handler(sig, frame): 
-            print("\n\n⚠ Interrupted by user (Ctrl+C)")
+        def signal_handler(sig, frame):
+            logger.warning("\n\n⚠ Interrupted by user (Ctrl+C)")
             interrupted[0] = True
             
         original_handler = signal.signal(signal.SIGINT, signal_handler)
 
         try:
             # Phase 1: Find seed states
-            print(f"\nPhase 1: Finding seed states for {self.method_name}...")
+            logger.info(f"\nPhase 1: Finding seed states for {self.method_name}...")
             p1_start = time.time()
-            
+
             for state_id in range(max_states):
                 if interrupted[0]: break
                 if state_id % log_interval == 0 and state_id > 0:
@@ -224,7 +229,7 @@ class Solver(pocket_cube.PocketCube, ABC):
                     seed_str = ", ".join([f"{c}: {seed_counts[c]:,}" for c in pocket_cube.COLOR_NEUTRAL if seed_counts[c] > 0])
                     fails = len(failed_states)
                     fail_str = f" | ❌ Fails: {fails:,}" if fails > 0 else ""
-                    print(f"  [{pct:>5.1f}%] Scanned {state_id:>9,} | Seeds -> {seed_str if seed_str else 'None yet'}{fail_str}")
+                    logger.info(f"  [{pct:>5.1f}%] Scanned {state_id:>9,} | Seeds -> {seed_str if seed_str else 'None yet'}{fail_str}")
                 
                 if dist[state_id] < 0: continue
                 
@@ -252,23 +257,23 @@ class Solver(pocket_cube.PocketCube, ABC):
 
             if interrupted[0]: return color_data, failed_states
 
-            print(f"\n  ✓ Phase 1 Complete in {time.time() - p1_start:.1f}s")
-            print(f"  {'='*30}\n  FINAL SEED COUNTS:")
+            logger.info(f"\n  ✓ Phase 1 Complete in {time.time() - p1_start:.1f}s")
+            logger.info(f"  {'='*30}\n  FINAL SEED COUNTS:")
             for c in sorted(pocket_cube.COLOR_NEUTRAL):
-                print(f"    Color {c}: {seed_counts[c]:>9,} states")
-            print(f"  {'-'*30}")
-            print(f"    Failures: {len(failed_states):>9,} states")
-            print(f"  {'='*30}")
+                logger.info(f"    Color {c}: {seed_counts[c]:>9,} states")
+            logger.info(f"  {'-'*30}")
+            logger.info(f"    Failures: {len(failed_states):>9,} states")
+            logger.info(f"  {'='*30}")
 
             # Phase 2: BFS with Double-Buffering
-            print(f"\nPhase 2: Propagating distances using global transition table...")
+            logger.info(f"\nPhase 2: Propagating distances using global transition table...")
             first_step = structural_steps[0]
-            
+
             for color in pocket_cube.COLOR_NEUTRAL:
                 if interrupted[0]: break
                 if seed_counts[color] == 0: continue
-                
-                print(f"\n  Propagating {color}...")
+
+                logger.info(f"\n  Propagating {color}...")
                 p2_start = time.time()
                 data_matrix = color_data[color].view(np.int8).reshape(max_states, len(color_data[color].dtype.names))
                 buf_a = np.zeros(max_states, dtype=np.int32)
@@ -282,12 +287,12 @@ class Solver(pocket_cube.PocketCube, ABC):
                 
                 while q_len > 0 and not interrupted[0]:
                     total_propagated += q_len
-                    print(f"    [Depth {depth:>2}] Propagating {q_len:>9,} states...")
+                    logger.info(f"    [Depth {depth:>2}] Propagating {q_len:>9,} states...")
                     q_len = propagate_bfs_kernel(data_matrix, curr_q[:q_len], next_q, state_transitions, max_states, color_data[color].dtype.names.index(first_step))
                     curr_q, next_q = next_q, curr_q
                     depth += 1
-                    
-                print(f"  ✓ {color} Complete: {total_propagated:,} states mapped in {time.time() - p2_start:.1f}s")
+
+                logger.info(f"  ✓ {color} Complete: {total_propagated:,} states mapped in {time.time() - p2_start:.1f}s")
         finally:
             signal.signal(signal.SIGINT, signal.SIG_DFL)
         return color_data, failed_states
@@ -299,23 +304,23 @@ class Solver(pocket_cube.PocketCube, ABC):
 def get_or_create_global_transitions(max_states: int, moves: List[str], log_interval: int = DEFAULT_LOG_INTERVAL, transition_file: str = DEFAULT_TRANSITION_NPY) -> np.ndarray:
     path = Path(transition_file)
     if path.exists():
-        print(f"\n[SOLVER] Loading existing global state transitions from {transition_file}...")
+        logger.info(f"\n[SOLVER] Loading existing global state transitions from {transition_file}...")
         start_time = time.time()
         transitions = np.load(path)
-        print(f"✓ Loaded in {time.time() - start_time:.2f}s")
+        logger.info(f"✓ Loaded in {time.time() - start_time:.2f}s")
         return transitions
 
-    print(f"\n[SOLVER] Building global state transition table ({max_states:,} states)...")
+    logger.info(f"\n[SOLVER] Building global state transition table ({max_states:,} states)...")
     start_time = time.time()
     num_moves = len(moves)
     transitions = np.full((num_moves, max_states), -1, dtype=np.int32)
     cube = pocket_cube.PocketCube()
-    
+
     for state_id in range(max_states):
         if state_id > 0 and state_id % log_interval == 0:
             pct = (state_id / max_states) * 100
-            print(f"  [{pct:>5.1f}%] Processed {state_id:>9,} / {max_states:,} ...")
-            
+            logger.info(f"  [{pct:>5.1f}%] Processed {state_id:>9,} / {max_states:,} ...")
+
         p7, q7 = cube.unpackcube(state_id)
         perm8, ori8 = cube.lift_to_full8(p7, q7)
         for move_idx, move_name in enumerate(moves):
@@ -326,47 +331,47 @@ def get_or_create_global_transitions(max_states: int, moves: List[str], log_inte
             w = cube.packcube((pp7, qq7))
             if w < max_states:
                 transitions[move_idx, state_id] = w
-                
-    print(f"✓ Global transition table built in {time.time() - start_time:.1f}s")
-    
-    print(f"\n[SOLVER] Saving global state transitions to {transition_file}...")
+
+    logger.info(f"✓ Global transition table built in {time.time() - start_time:.1f}s")
+
+    logger.info(f"\n[SOLVER] Saving global state transitions to {transition_file}...")
     np.save(path, transitions)
     return transitions
 
 def get_or_create_optimal_distances(transitions: np.ndarray, max_states: int, dist_file: str = DEFAULT_DIST_NPY) -> np.ndarray:
     path = Path(dist_file)
     if path.exists():
-        print(f"\n[SOLVER] Loading existing optimal distances from {dist_file}")
+        logger.info(f"\n[SOLVER] Loading existing optimal distances from {dist_file}")
         return np.load(path)
-        
-    print(f"\n[SOLVER] Calculating optimal distances from solved state...")
+
+    logger.info(f"\n[SOLVER] Calculating optimal distances from solved state...")
     start_time = time.time()
     dist = generate_optimal_depths(transitions, max_states)
     np.save(path, dist)
-    print(f"✓ Saved to {dist_file} in {time.time() - start_time:.1f}s")
+    logger.info(f"✓ Saved to {dist_file} in {time.time() - start_time:.1f}s")
     return dist
 
 def load_solver(method: str) -> Solver:
     algorithm_dir = Path(__file__).parent / "algorithms"
     algorithm_file = algorithm_dir / f"{method}.json"
-    
+
     if not algorithm_file.exists():
         raise FileNotFoundError(f"Algorithm file not found: {algorithm_file}")
-    
-    if method == 'ortega':
-        from method_solvers.solver_ortega import OrtegaSolver
-        return OrtegaSolver(str(algorithm_file))
-    elif method == 'cll':
-        from method_solvers.solver_cll import CLLSolver
-        return CLLSolver(str(algorithm_file))
-    elif method == 'lbl':
-        from method_solvers.solver_lbl import LBLSolver
-        return LBLSolver(str(algorithm_file))
-    elif method == 'eg':
-        from method_solvers.solver_eg import EGSolver
-        return EGSolver(str(algorithm_file))
-    else:
+
+    from method_solvers.solver_ortega import OrtegaSolver
+    from method_solvers.solver_cll import CLLSolver
+    from method_solvers.solver_lbl import LBLSolver
+    from method_solvers.solver_eg import EGSolver
+
+    solver_classes = {
+        'ortega': OrtegaSolver,
+        'cll': CLLSolver,
+        'lbl': LBLSolver,
+        'eg': EGSolver,
+    }
+    if method not in solver_classes:
         raise ValueError(f"Unknown method: {method}")
+    return solver_classes[method](str(algorithm_file))
 
 def main():
     parser = argparse.ArgumentParser(description='2x2x2 Rubik\'s Cube Solver')
@@ -395,20 +400,20 @@ def main():
         if method_dir.exists() and not args.force:
             all_cached = all((method_dir / f"{c}_data.npy").exists() for c in pocket_cube.COLOR_NEUTRAL)
             if all_cached:
-                print(f"\n{'='*80}\n⏭️ SKIPPING: {method.upper()} (Already cached in {method_dir}/)\n{'='*80}")
+                logger.info(f"\n{'='*80}\n⏭️ SKIPPING: {method.upper()} (Already cached in {method_dir}/)\n{'='*80}")
                 continue
-                
-        print(f"\n{'='*80}\nANALYZING: {method.upper()}\n{'='*80}")
+
+        logger.info(f"\n{'='*80}\nANALYZING: {method.upper()}\n{'='*80}")
         solver = load_solver(method)
         color_data, failed = solver.run_analysis(dist, transitions, max_states, args.log_interval)
-        
+
         method_dir.mkdir(parents=True, exist_ok=True)
         for color, data in color_data.items():
             if np.any(data['depth'] >= 0):
                 np.save(method_dir / f"{color}_data.npy", data)
-                print(f"  [+] Saved {color}_data.npy")
-                
-    print(f"\n✅ All analysis complete in {(time.time() - total_start_time)/60:.1f} minutes!")
+                logger.info(f"  [+] Saved {color}_data.npy")
+
+    logger.info(f"\n✅ All analysis complete in {(time.time() - total_start_time)/60:.1f} minutes!")
 
 if __name__ == "__main__":
     main()

@@ -6,6 +6,7 @@ This module provides the fundamental cube state representation using a 7-corner 
 
 import math
 import numpy as np
+from pathlib import Path
 from typing import List, Tuple, Optional
 
 WHITE = 'W'
@@ -15,11 +16,10 @@ BLUE = 'B'
 ORANGE = 'O'
 RED = 'R'
 
-# Color sets for solving
-WHITE_YELLOW = {WHITE, YELLOW}
-GREEN_BLUE = {GREEN, BLUE}
-ORANGE_RED = {ORANGE, RED}
-COLOR_NEUTRAL = {WHITE, YELLOW, GREEN, BLUE, ORANGE, RED}
+COLOR_NEUTRAL = (WHITE, YELLOW, GREEN, BLUE, ORANGE, RED)
+
+# Analysis dtype fields that are not per-step move counts (see solver.Solver.run_analysis)
+NON_STEP_FIELDS = ('depth', 'pre_auf', 'mid_auf', 'post_auf')
 
 # State space size
 N_STATES = math.factorial(7) * (3**6)
@@ -269,11 +269,49 @@ class PocketCube:
     
     def is_solved(self) -> bool:
         """Check if entire cube is solved."""
-        stickers = self.get_stickers()
-        return all(len(set(stickers[i:i+4])) == 1 for i in range(0, 24, 4))
-    
+        return PocketCube.is_solved_state(self.perm8, self.ori8)
+
     @staticmethod
     def is_solved_state(perm8: np.ndarray, ori8: np.ndarray) -> bool:
         """Static method to check if given perm/ori arrays represent a solved cube."""
         stickers = PocketCube.get_stickers8(perm8, ori8)
         return all(len(set(stickers[i:i+4])) == 1 for i in range(0, 24, 4))
+
+
+def load_optimal_data(results_dir: Path, method: str, colors: List[str]) -> np.ndarray:
+    """
+    Loads and merges per-color precomputed analysis data (.npy files) for a solving method,
+    picking whichever color gives the lowest total move count for each state.
+    """
+    method_dir = results_dir / method.lower()
+    color_data_list = []
+    for c in colors:
+        p = method_dir / f"{c}_data.npy"
+        if p.exists():
+            color_data_list.append(np.load(p))
+
+    if not color_data_list:
+        raise FileNotFoundError(f"Could not find any .npy files for {method} in {method_dir}. Did you run solver.py?")
+
+    merged_data = color_data_list[0].copy()
+    step_names = [n for n in merged_data.dtype.names if n != 'depth']
+    n_colors, N = len(color_data_list), len(merged_data)
+
+    totals = np.full((n_colors, N), np.inf)
+    for i, data in enumerate(color_data_list):
+        valid_mask = data['depth'] >= 0
+        total_moves = np.zeros(N)
+        for step in step_names:
+            total_moves += data[step]
+        totals[i, valid_mask] = total_moves[valid_mask]
+
+    best_idx = np.argmin(totals, axis=0)
+    best_total = np.min(totals, axis=0)
+
+    for step in step_names:
+        stacked = np.vstack([d[step] for d in color_data_list])
+        chosen = stacked[best_idx, np.arange(N)]
+        chosen[~np.isfinite(best_total)] = -1
+        merged_data[step] = chosen
+
+    return merged_data

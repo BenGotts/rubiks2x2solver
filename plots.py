@@ -1,6 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from typing import Tuple
+
+import pocket_cube
+
+
+def _pmf(values: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Bincount + percentage-of-total, the recurring PMF pattern across these plots."""
+    counts = np.bincount(values)
+    return counts, counts / len(values) * 100
+
 
 def plot_main_comparison_matrix(viz, data_dict, optimal_dist=None):
     """Main 3-panel comparison matrix."""
@@ -19,15 +29,13 @@ def plot_main_comparison_matrix(viz, data_dict, optimal_dist=None):
         gap = np.maximum(totals - opt_depths, 0)
 
         # 1. Efficiency Gap PMF (%)
-        c1 = np.bincount(gap)
-        c1_pct = c1/len(gap)*100
+        c1, c1_pct = _pmf(gap)
         ax1.plot(np.arange(len(c1)), c1_pct, '-o', label=label, color=color, markersize=4, linewidth=2)
         for moves, (count, pct) in enumerate(zip(c1, c1_pct)): 
             gap_rows.append([label, moves, count, pct])
 
         # 2. Total Move Distribution PMF (%)
-        c2 = np.bincount(totals)
-        c2_pct = c2/len(totals)*100
+        c2, c2_pct = _pmf(totals)
         ax2.plot(np.arange(len(c2)), c2_pct, '-o', label=label, color=color, markersize=4, linewidth=2)
         for moves, (count, pct) in enumerate(zip(c2, c2_pct)): 
             total_rows.append([label, moves, count, pct])
@@ -42,8 +50,7 @@ def plot_main_comparison_matrix(viz, data_dict, optimal_dist=None):
 
     if optimal_dist is not None:
         opt = optimal_dist[optimal_dist >= 0].astype(np.int32)
-        c_opt = np.bincount(opt)
-        c_opt_pct = c_opt/len(opt)*100
+        c_opt, c_opt_pct = _pmf(opt)
         
         ax2.plot(np.arange(len(c_opt)), c_opt_pct, marker='o', linestyle='--', linewidth=2.0, 
                  markersize=7, color='black', label="Optimal", zorder=20, 
@@ -74,10 +81,9 @@ def plot_main_comparison_matrix(viz, data_dict, optimal_dist=None):
     ax3.set_xlabel("Total Moves (HTM)")
     viz.save_plot(fig, "method_comparison_matrix.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_matrix_efficiency_gap.csv", ["Method", "Moves_Above_Optimal", "Count", "Percentage"], gap_rows)
-        viz.save_computed_csv("computed_matrix_total_moves.csv", ["Method", "Total_Moves", "Count", "Percentage"], total_rows)
-        viz.save_computed_csv("computed_matrix_cumulative.csv", ["Method", "Total_Moves", "Cumulative_Count", "Cumulative_Percentage"], cdf_rows)
+    viz.save_computed_csv("computed_matrix_efficiency_gap.csv", ["Method", "Moves_Above_Optimal", "Count", "Percentage"], gap_rows)
+    viz.save_computed_csv("computed_matrix_total_moves.csv", ["Method", "Total_Moves", "Count", "Percentage"], total_rows)
+    viz.save_computed_csv("computed_matrix_cumulative.csv", ["Method", "Total_Moves", "Cumulative_Count", "Cumulative_Percentage"], cdf_rows)
 
 def plot_efficiency_gap_faceted(viz, data_dict):
     """Small-multiple histograms showing move waste per method."""
@@ -112,8 +118,7 @@ def plot_efficiency_gap_faceted(viz, data_dict):
     for k in range(n, len(axes)): axes[k].axis('off')
     viz.save_plot(fig, "efficiency_gap_faceted.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_gap_stats.csv", ["Method", "Mean_Gap", "Median_Gap", "Max_Gap", "N_States"], stats_rows)
+    viz.save_computed_csv("computed_gap_stats.csv", ["Method", "Mean_Gap", "Median_Gap", "Max_Gap", "N_States"], stats_rows)
 
 def plot_per_method_totals(viz, data_dict):
     """Faceted histograms of total moves with stats box."""
@@ -148,8 +153,7 @@ def plot_per_method_totals(viz, data_dict):
     for k in range(n, len(axes)): axes[k].axis('off')
     viz.save_plot(fig, "method_totals_faceted.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_totals_stats.csv", ["Method", "Mean_Moves", "Median_Moves", "Max_Moves", "N_States"], stats_rows)
+    viz.save_computed_csv("computed_totals_stats.csv", ["Method", "Mean_Moves", "Median_Moves", "Max_Moves", "N_States"], stats_rows)
 
 def plot_auf_grouped_bars(viz, data_dict):
     """AUF Distribution bars."""
@@ -195,10 +199,9 @@ def plot_auf_grouped_bars(viz, data_dict):
     
     viz.save_plot(fig, "auf_comparison.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_auf_distribution.csv", 
-            ["Method", "AUF_0_Count", "AUF_0_Pct", "AUF_1_Count", "AUF_1_Pct", "AUF_2_Count", "AUF_2_Pct", "AUF_3_Count", "AUF_3_Pct", "Mean_Total_AUF"], 
-            auf_rows)
+    viz.save_computed_csv("computed_auf_distribution.csv",
+        ["Method", "AUF_0_Count", "AUF_0_Pct", "AUF_1_Count", "AUF_1_Pct", "AUF_2_Count", "AUF_2_Pct", "AUF_3_Count", "AUF_3_Pct", "Mean_Total_AUF"],
+        auf_rows)
 
 def plot_first_vs_remainder_lines(viz, data_dict, optimal_dist=None):
     """Compares setup steps vs algorithmic remainder."""
@@ -209,7 +212,7 @@ def plot_first_vs_remainder_lines(viz, data_dict, optimal_dist=None):
         color = viz.method_colors.get(label, '#777777')
         valid = data['depth'] >= 0
         
-        step_names = [n for n in data.dtype.names if n not in ['depth', 'pre_auf', 'mid_auf', 'post_auf']]
+        step_names = [n for n in data.dtype.names if n not in pocket_cube.NON_STEP_FIELDS]
         first_col = next((s for s in step_names if 'layer' in s.lower() or 'face' in s.lower()), step_names[0])
         
         first_vals = data[first_col][valid].astype(np.int32)
@@ -217,15 +220,13 @@ def plot_first_vs_remainder_lines(viz, data_dict, optimal_dist=None):
         remainder = totals - first_vals - data['pre_auf'][valid].astype(np.int32)
 
         # Plot First Step
-        c1 = np.bincount(first_vals)
-        c1_pct = c1/len(first_vals)*100
+        c1, c1_pct = _pmf(first_vals)
         ax1.plot(np.arange(len(c1)), c1_pct, '-o', label=f"{label} ({first_col.upper()})", color=color, markersize=4)
         for moves, (count, pct) in enumerate(zip(c1, c1_pct)): 
             split_rows.append([label, "First_Step", moves, count, pct])
         
         # Plot Remainder
-        c2 = np.bincount(remainder)
-        c2_pct = c2/len(remainder)*100
+        c2, c2_pct = _pmf(remainder)
         ax2.plot(np.arange(len(c2)), c2_pct, '--o', label=label, color=color, markerfacecolor='white', markersize=4)
         for moves, (count, pct) in enumerate(zip(c2, c2_pct)): 
             split_rows.append([label, "Remainder", moves, count, pct])
@@ -237,14 +238,13 @@ def plot_first_vs_remainder_lines(viz, data_dict, optimal_dist=None):
         ax.legend(fontsize=8, loc='upper right')
     viz.save_plot(fig, "first_vs_remainder.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_first_vs_remainder.csv", ["Method", "Segment", "Moves", "Count", "Percentage"], split_rows)
+    viz.save_computed_csv("computed_first_vs_remainder.csv", ["Method", "Segment", "Moves", "Count", "Percentage"], split_rows)
 
 def plot_per_step_volume(viz, data_dict):
     """Grid of PMFs for individual solve steps."""
     all_steps = set()
     for d in data_dict.values():
-        all_steps.update([n for n in d.dtype.names if n not in ['depth', 'pre_auf', 'mid_auf', 'post_auf']])
+        all_steps.update([n for n in d.dtype.names if n not in pocket_cube.NON_STEP_FIELDS])
     all_steps = sorted(list(all_steps))
 
     cols = 2
@@ -261,8 +261,7 @@ def plot_per_step_volume(viz, data_dict):
                 vals = data[step][data[step] >= 0].astype(np.int32)
                 if len(vals) == 0: continue
                 
-                counts = np.bincount(vals)
-                pcts = counts/len(vals)*100
+                counts, pcts = _pmf(vals)
                 color = viz.method_colors.get(label, '#777777')
                 
                 ax.plot(np.arange(len(counts)), pcts, '-o', label=label, color=color, markersize=3, alpha=0.8)
@@ -279,68 +278,13 @@ def plot_per_step_volume(viz, data_dict):
     plt.tight_layout()
     viz.save_plot(fig, "per_step_distribution.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_per_step_pmf.csv", ["Method", "Step_Name", "Moves", "Count", "Percentage"], step_rows)
+    viz.save_computed_csv("computed_per_step_pmf.csv", ["Method", "Step_Name", "Moves", "Count", "Percentage"], step_rows)
     
-def plot_random_efficiency_gap(viz, data_dict):
-    import matplotlib.pyplot as plt
-    import numpy as np
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    num_trials = len(list(data_dict.values())[0]) if data_dict else 0
-    n_str = f"{num_trials // 1000}k" if num_trials >= 1000 else str(num_trials)
-        
-    ax.set_title(f"Performance vs Optimal ({n_str} Random WCA Scrambles)", fontsize=14, fontweight='bold')
-    
-    max_gap = 0
-    export_rows = []
-    
-    for label, data in data_dict.items():
-        color = viz.method_colors.get(label, '#777777')
-        
-        valid_mask = data['depth'] >= 0
-        if np.sum(valid_mask) == 0: continue
-        
-        totals = viz.get_total_moves(data)
-        opt_depths = np.asarray(data['depth'][valid_mask]).astype(np.int32)
-        
-        gap = np.maximum(totals - opt_depths, 0)
-        if len(gap) == 0: continue
-        
-        max_gap = max(max_gap, np.max(gap))
-        
-        counts = np.bincount(gap)
-        percentages = (counts / len(gap)) * 100
-        
-        for moves_over, (count, pct) in enumerate(zip(counts, percentages)):
-            export_rows.append([label, moves_over, count, pct])
-        
-        ax.plot(np.arange(len(counts)), percentages, '-o', label=label, color=color, markersize=5, linewidth=2)
-        
-    ax.set_xlabel("Moves Over Optimal (Efficiency Gap)", fontsize=12)
-    ax.set_ylabel("% of Solves", fontsize=12)
-    ax.set_xlim(0, max(5, max_gap + 1))
-    ax.grid(True, alpha=0.3, linestyle='--')
-    ax.legend(fontsize=10)
-    
-    viz.save_plot(fig, "random_performance_vs_optimal.png")
-    
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv(
-            "computed_random_efficiency_gap.csv",
-            ["Method", "Moves_Over_Optimal", "Count", "Percentage_of_Solves"],
-            export_rows
-        )
-
 def plot_random_comparison_summary(viz, data_dict):
     """
     Creates a 3-panel summary plot (Violin, CDF, Boxplot) of random trial data,
     mimicking the original random solver's output format, and prints stats to console.
     """
-    import matplotlib.pyplot as plt
-    import numpy as np
-
     if not data_dict:
         return
 
@@ -372,7 +316,7 @@ def plot_random_comparison_summary(viz, data_dict):
         optimal_depths_data.append(opt_depths)
         extra_moves_data.append(extra_moves)
 
-        step_cols = [n for n in data.dtype.names if n not in ['depth', 'pre_auf', 'mid_auf', 'post_auf']]
+        step_cols = [n for n in data.dtype.names if n not in pocket_cube.NON_STEP_FIELDS]
         if step_cols:
             first_step_data.append(data[step_cols[0]][valid_mask])
         else:
@@ -479,20 +423,19 @@ def plot_random_comparison_summary(viz, data_dict):
     plt.tight_layout()
     viz.save_plot(fig, "random_comparison_summary.png")
 
-    if hasattr(viz, 'save_computed_csv'):
-        viz.save_computed_csv("computed_random_summary_stats.csv", 
-            ["Method", "Extra_Mean", "Extra_Median", "Extra_Std", "Total_Mean", "Total_Median", "Total_Std", "FirstStep_Mean", "FirstStep_Median", "Optimal_Mean", "Optimal_Median", "N_States"], 
-            stats_rows)
-        viz.save_computed_csv("computed_random_summary_cdf.csv", 
-            ["Method", "Extra_Moves", "Cumulative_Count", "Cumulative_Percentage"], 
-            cdf_rows)
-            
-        viz.save_computed_csv("computed_random_summary_extra_moves_pmf.csv", 
-            ["Method", "Extra_Moves", "Count", "Percentage"], 
-            violin_rows)
-        viz.save_computed_csv("computed_random_summary_total_moves_pmf.csv", 
-            ["Method", "Total_Moves", "Count", "Percentage"], 
-            boxplot_rows)
+    viz.save_computed_csv("computed_random_summary_stats.csv",
+        ["Method", "Extra_Mean", "Extra_Median", "Extra_Std", "Total_Mean", "Total_Median", "Total_Std", "FirstStep_Mean", "FirstStep_Median", "Optimal_Mean", "Optimal_Median", "N_States"],
+        stats_rows)
+    viz.save_computed_csv("computed_random_summary_cdf.csv",
+        ["Method", "Extra_Moves", "Cumulative_Count", "Cumulative_Percentage"],
+        cdf_rows)
+
+    viz.save_computed_csv("computed_random_summary_extra_moves_pmf.csv",
+        ["Method", "Extra_Moves", "Count", "Percentage"],
+        violin_rows)
+    viz.save_computed_csv("computed_random_summary_total_moves_pmf.csv",
+        ["Method", "Total_Moves", "Count", "Percentage"],
+        boxplot_rows)
 
     # Print summary statistics to the terminal
     print("\n" + "="*60)
