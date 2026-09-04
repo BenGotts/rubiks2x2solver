@@ -110,8 +110,8 @@ def main():
             logger.info(f"Loading Configuration: {config.get('name', 'Method Comparison')}")
     else:
         logger.info("No config. Scanning results/ for all methods...")
-        methods_list = [{"method": d.name, "label": d.name.upper()} 
-                       for d in viz.results_dir.iterdir() if d.is_dir()]
+        methods_list = [{"method": p.stem, "label": p.stem.upper()}
+                       for p in viz.results_dir.glob("*.npz")]
 
     optimal_dist = np.load(args.dist_npy) if Path(args.dist_npy).exists() else None
 

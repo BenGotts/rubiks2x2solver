@@ -16,7 +16,57 @@ from solver import Solver
 
 class EGSolver(Solver):
     """Solver implementing the EG (Erik Gunnar) method."""
-    
+
+    # Shared with any other method whose seed states are "one face solved" (see OrtegaSolver).
+    SEED_CRITERION = 'face'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Every (pre_auf, rotation, algorithm, post_auf) combination _solve_eg used to search
+        # is a fixed transform independent of any state or color, so the exact state each one
+        # solves can be computed once (by inverting the composed transform and applying that
+        # inverse to the solved state) instead of re-searching all ~8,000 combinations per
+        # seed state. Solving becomes a single dict lookup.
+        self._eg_case_table = self._build_eg_case_table()
+
+    def _build_eg_case_table(self) -> Dict[Tuple[Tuple[int, ...], Tuple[int, ...]], Tuple[int, int, int]]:
+        identity = (np.arange(8), np.zeros(8, dtype=int), 0)
+
+        # is_solved_state accepts any of the 24 whole-cube-rotation images of the identity as
+        # "solved" (see Solver._solved_orbit), not just the identity itself, so a combo can
+        # land on any of them and still count as a successful post-AUF check -- every one of
+        # them must be tried as a target when inverting back to find which state a combo solves.
+        solved_states = self._solved_orbit()
+
+        # Tried first in every (pre_auf, rotation) combo, so it reproduces the old dedicated
+        # "EG skip" check (no algorithm needed, just AUF alignment) via pre="" + rotation=""
+        # + this + post-loop -- the same priority order the old code used before ever trying
+        # a real algorithm.
+        algs = [identity] + list(self.compiled_algorithms.get('eg', {}).values())
+
+        table: Dict[Tuple[Tuple[int, ...], Tuple[int, ...]], Tuple[int, int, int]] = {}
+        for pre in self.compiled_auf:
+            for rot_name in self.Y_ROTS:
+                if rot_name:
+                    rot_p, rot_t = self.ROTATIONS[rot_name]
+                    rotation = (rot_p, rot_t, 0)
+                else:
+                    rotation = identity
+                pre_rot = self._compose_compiled(pre, rotation)
+
+                for alg in algs:
+                    pre_rot_alg = self._compose_compiled(pre_rot, alg)
+
+                    for post in self.compiled_auf:
+                        full = self._compose_compiled(pre_rot_alg, post)
+                        inv = self._invert_compiled(full)
+                        for solved_p, solved_o in solved_states:
+                            seed_p, seed_o, _ = self._apply_compiled(solved_p, solved_o, inv)
+                            key = (tuple(seed_p.tolist()), tuple(seed_o.tolist()))
+                            if key not in table:
+                                table[key] = (pre[2], alg[2], post[2])
+        return table
+
     def is_seed_state(self, perm8: np.ndarray, ori8: np.ndarray) -> bool:
         """Seed states are those with one face solved."""
         return self.is_face_solved(perm8, ori8)
@@ -41,37 +91,7 @@ class EGSolver(Solver):
             }
         }
     
-    def _get_post_auf_cost(self, perm8: np.ndarray, ori8: np.ndarray) -> int:
-        """Helper to find how many U moves it takes to align the solved cube."""
-        for u_auf in self.AUF_MOVES:
-            p1, o1, cost = self._apply_algorithm(perm8, ori8, u_auf)
-            if self.is_solved_state(p1, o1):
-                return cost
-        return -1
-
     def _solve_eg(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, int, int]:
-        # 1. Check for EG Skip
-        skip_cost = self._get_post_auf_cost(perm8, ori8)
-        if skip_cost != -1:
-            return 0, 0, skip_cost
-            
-        # 2. Try Pre-AUF + Rotation (y) + Algorithm + Post-AUF (U)
-        for pre_auf in self.AUF_MOVES:
-            p_pre, o_pre, pre_cost = self._apply_algorithm(perm8, ori8, pre_auf)
-            
-            # Apply zero-cost Y rotations to align the algorithm
-            for rot in ["", "y", "y'", "y2"]:
-                if rot:
-                    p_rot, o_rot = self._apply_rotation(p_pre, o_pre, rot)
-                else:
-                    p_rot, o_rot = p_pre, o_pre
-                
-                for _, alg in self.algorithms.get('eg', {}).items():
-                    p_alg, o_alg, alg_cost = self._apply_algorithm(p_rot, o_rot, alg)
-                    
-                    # Check if the algorithm solved the cube
-                    post_cost = self._get_post_auf_cost(p_alg, o_alg)
-                    if post_cost != -1:
-                        return pre_cost, alg_cost, post_cost
-                        
-        return -1, -1, -1
+        key = (tuple(perm8.tolist()), tuple(ori8.tolist()))
+        result = self._eg_case_table.get(key)
+        return result if result is not None else (-1, -1, -1)

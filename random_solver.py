@@ -21,14 +21,14 @@ logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 class RandomSolver:
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, force_tables: bool = False):
         with open(config_file, 'r') as f:
             self.config = json.load(f)
-        
+
         self.max_states = pocket_cube.N_STATES
         self.moves = pocket_cube.REDUCED_MOVES
-        self.transitions = get_or_create_global_transitions(self.max_states, self.moves)
-        self.optimal_dist = get_or_create_optimal_distances(self.transitions, self.max_states)
+        self.transitions = get_or_create_global_transitions(self.max_states, self.moves, force=force_tables)
+        self.optimal_dist = get_or_create_optimal_distances(self.transitions, self.max_states, force=force_tables)
         
         self.results_dir = Path(self.config.get('results_dir', 'results'))
         self.results_dir.mkdir(exist_ok=True)
@@ -140,10 +140,12 @@ if __name__ == "__main__":
                         help='Only test WCA-legal scrambles (depth >= 4)')
     parser.add_argument('--seed', type=int, default=None,
                         help='Random seed for reproducibility')
-    
+    parser.add_argument('--force-tables', action='store_true',
+                        help='Rebuild the transition/distance tables even if their cache files exist')
+
     args = parser.parse_args()
-    
-    rs = RandomSolver(args.config)
+
+    rs = RandomSolver(args.config, force_tables=args.force_tables)
     results = rs.run_trials(
         num_trials=args.num_trials, 
         wca_legal=args.wca_legal, 

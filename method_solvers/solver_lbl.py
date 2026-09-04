@@ -14,7 +14,10 @@ from solver import Solver
 
 class LBLSolver(Solver):
     """Solver implementing the Layer-By-Layer (Beginner) method."""
-    
+
+    # Shared with any other method whose seed states are "first layer solved" (see CLLSolver).
+    SEED_CRITERION = 'layer'
+
     def is_seed_state(self, perm8: np.ndarray, ori8: np.ndarray) -> bool:
         """Seed states are those with first layer solved."""
         return self.is_layer_solved(perm8, ori8)
@@ -64,31 +67,31 @@ class LBLSolver(Solver):
             (new_perm8, new_ori8, pre_auf_cost, alg_cost)
         """
         stickers = self.get_stickers8(perm8, ori8)
-        
+
         # Check if already oriented (OLL Skip)
-        if len(set(stickers[0:4])) == 1:
+        if stickers[0] == stickers[1] == stickers[2] == stickers[3]:
             return perm8, ori8, 0, 0
-        
+
         # Try Pre-AUF + algorithm combinations
-        for auf in self.AUF_MOVES:
-            p_auf, o_auf, auf_cost = self._apply_algorithm(perm8, ori8, auf)
-            
-            for _, alg in self.algorithms.get('oll', {}).items():
-                p_res, o_res, alg_cost = self._apply_algorithm(p_auf, o_auf, alg)
+        for compiled_auf in self.compiled_auf:
+            p_auf, o_auf, auf_cost = self._apply_compiled(perm8, ori8, compiled_auf)
+
+            for compiled in self.compiled_algorithms.get('oll', {}).values():
+                p_res, o_res, alg_cost = self._apply_compiled(p_auf, o_auf, compiled)
                 s = self.get_stickers8(p_res, o_res)
-                
+
                 # Check if the top face is a single solid color
-                if len(set(s[0:4])) == 1:
+                if s[0] == s[1] == s[2] == s[3]:
                     return p_res, o_res, auf_cost, alg_cost
-                    
+
         return perm8, ori8, -1, -1
 
     def _get_post_auf_cost(self, perm8: np.ndarray, ori8: np.ndarray) -> int:
         """
         Helper to find how many U moves it takes to align the top layer with the bottom layer.
         """
-        for u_auf in self.AUF_MOVES:
-            p1, o1, cost = self._apply_algorithm(perm8, ori8, u_auf)
+        for compiled_auf in self.compiled_auf:
+            p1, o1, cost = self._apply_compiled(perm8, ori8, compiled_auf)
             if self.is_solved_state(p1, o1):
                 return cost
         return -1
@@ -96,7 +99,7 @@ class LBLSolver(Solver):
     def _solve_pll(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, int, int]:
         """
         Solve PLL and extract Mid-AUF and Post-AUF costs.
-        
+
         Returns:
             (mid_auf_cost, pll_cost, post_auf_cost)
         """
@@ -104,17 +107,17 @@ class LBLSolver(Solver):
         skip_cost = self._get_post_auf_cost(perm8, ori8)
         if skip_cost != -1:
             return 0, 0, skip_cost
-            
+
         # 2. Try Mid-AUF + algorithm combinations
-        for mid_auf in self.AUF_MOVES:
-            p_mid, o_mid, mid_cost = self._apply_algorithm(perm8, ori8, mid_auf)
-            
-            for _, alg in self.algorithms.get('pll', {}).items():
-                p_alg, o_alg, alg_cost = self._apply_algorithm(p_mid, o_mid, alg)
-                
+        for mid_compiled in self.compiled_auf:
+            p_mid, o_mid, mid_cost = self._apply_compiled(perm8, ori8, mid_compiled)
+
+            for compiled in self.compiled_algorithms.get('pll', {}).values():
+                p_alg, o_alg, alg_cost = self._apply_compiled(p_mid, o_mid, compiled)
+
                 # Check if it just needs a final U turn to be completely solved
                 post_cost = self._get_post_auf_cost(p_alg, o_alg)
                 if post_cost != -1:
                     return mid_cost, alg_cost, post_cost
-                    
+
         return -1, -1, -1

@@ -13,7 +13,11 @@ from solver import Solver
 
 class CLLSolver(Solver):
     """Solver implementing the CLL method."""
-    
+
+    # Shared with any other method whose seed states are "first layer solved", so a Phase 1
+    # seed scan can be reused across methods instead of repeating it (see Solver.run_analysis).
+    SEED_CRITERION = 'layer'
+
     def is_seed_state(self, perm8: np.ndarray, ori8: np.ndarray) -> bool:
         """Seed states are those with the first layer completely solved."""
         return self.is_layer_solved(perm8, ori8)
@@ -44,8 +48,8 @@ class CLLSolver(Solver):
     
     def _get_post_auf_cost(self, perm8: np.ndarray, ori8: np.ndarray) -> int:
         """Helper to find how many U moves it takes to align the solved cube."""
-        for u_auf in self.AUF_MOVES:
-            p1, o1, cost = self._apply_algorithm(perm8, ori8, u_auf)
+        for compiled_auf in self.compiled_auf:
+            p1, o1, cost = self._apply_compiled(perm8, ori8, compiled_auf)
             if self.is_solved_state(p1, o1):
                 return cost
         return -1
@@ -53,7 +57,7 @@ class CLLSolver(Solver):
     def _solve_cll(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, int, int]:
         """
         Solve CLL and extract Pre-AUF and Post-AUF costs.
-        
+
         Returns:
             (pre_auf_cost, cll_alg_cost, post_auf_cost)
         """
@@ -61,17 +65,17 @@ class CLLSolver(Solver):
         skip_cost = self._get_post_auf_cost(perm8, ori8)
         if skip_cost != -1:
             return 0, 0, skip_cost
-            
+
         # 2. Try Pre-AUF (U) + Algorithm + Post-AUF (U)
-        for pre_auf in self.AUF_MOVES:
-            p_pre, o_pre, pre_cost = self._apply_algorithm(perm8, ori8, pre_auf)
-            
-            for _, alg in self.algorithms.get('cll', {}).items():
-                p_alg, o_alg, alg_cost = self._apply_algorithm(p_pre, o_pre, alg)
-                
+        for pre_compiled in self.compiled_auf:
+            p_pre, o_pre, pre_cost = self._apply_compiled(perm8, ori8, pre_compiled)
+
+            for compiled in self.compiled_algorithms.get('cll', {}).values():
+                p_alg, o_alg, alg_cost = self._apply_compiled(p_pre, o_pre, compiled)
+
                 # Check if the algorithm solved the cube
                 post_cost = self._get_post_auf_cost(p_alg, o_alg)
                 if post_cost != -1:
                     return pre_cost, alg_cost, post_cost
-                        
+
         return -1, -1, -1

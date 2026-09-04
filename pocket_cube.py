@@ -112,6 +112,17 @@ FACELETS_2x2 = {
 
 FACE_ORDER = ["U", "R", "F", "D", "L", "B"]
 
+# Flattened, precomputed form of FACELETS_2x2/CORNER_TO_FACES/FACE_COLOR, used by
+# get_stickers8's hot path: _FACELET_POS gives the 24 (slot, facelet_index) pairs in
+# FACE_ORDER order (once, instead of re-walking two nested dicts every call), and
+# _PIECE_FACEIDX_COLOR[piece][face_idx] collapses the CORNER_TO_FACES -> FACE_COLOR lookup
+# chain into a single list index (no dict/hash lookups) per facelet.
+_FACELET_POS = [(slot, idx) for face in FACE_ORDER for slot, idx in FACELETS_2x2[face]]
+_PIECE_FACEIDX_COLOR = [
+    [FACE_COLOR[CORNER_TO_FACES[piece][face_idx]] for face_idx in range(3)]
+    for piece in range(8)
+]
+
 
 class PocketCube:
     """
@@ -245,17 +256,19 @@ class PocketCube:
     
     @staticmethod
     def get_stickers8(perm8: np.ndarray, ori8: np.ndarray) -> str:
-        """Static method to get stickers from perm/ori arrays."""
-        out = []
-        for face in FACE_ORDER:
-            for (slot, which_face_idx) in FACELETS_2x2[face]:
-                piece = perm8[slot]
-                ori = ori8[slot] % 3
-                face_tuple = CORNER_TO_FACES[piece]
-                actual_face_idx = (which_face_idx + ori) % 3
-                face_letter = face_tuple[actual_face_idx]
-                out.append(FACE_COLOR[face_letter])
-        return "".join(out)
+        """Static method to get stickers from perm/ori arrays. Hot path - called very
+        frequently during solving. Converts perm8/ori8 to plain Python lists once up front
+        (indexing a numpy array element repeatedly boxes it into a numpy scalar object each
+        time, which is markedly slower than native Python int indexing here), and uses the
+        precomputed _FACELET_POS/_PIECE_FACEIDX_COLOR tables instead of walking
+        CORNER_TO_FACES/FACE_COLOR per facelet."""
+        p = perm8.tolist()
+        o = ori8.tolist()
+        lut = _PIECE_FACEIDX_COLOR
+        return "".join(
+            lut[p[slot]][(idx + o[slot]) % 3]
+            for slot, idx in _FACELET_POS
+        )
     
     @staticmethod
     def pretty_print_cube(s: str):
@@ -273,25 +286,34 @@ class PocketCube:
 
     @staticmethod
     def is_solved_state(perm8: np.ndarray, ori8: np.ndarray) -> bool:
-        """Static method to check if given perm/ori arrays represent a solved cube."""
-        stickers = PocketCube.get_stickers8(perm8, ori8)
-        return all(len(set(stickers[i:i+4])) == 1 for i in range(0, 24, 4))
+        """Static method to check if given perm/ori arrays represent a solved cube. Hot path -
+        avoids building a set() per face (6x per call); chained == also short-circuits on the
+        first mismatch instead of unconditionally hashing all 4 characters."""
+        s = PocketCube.get_stickers8(perm8, ori8)
+        return (s[0] == s[1] == s[2] == s[3] and
+                s[4] == s[5] == s[6] == s[7] and
+                s[8] == s[9] == s[10] == s[11] and
+                s[12] == s[13] == s[14] == s[15] and
+                s[16] == s[17] == s[18] == s[19] and
+                s[20] == s[21] == s[22] == s[23])
 
 
 def load_optimal_data(results_dir: Path, method: str, colors: List[str]) -> np.ndarray:
     """
-    Loads and merges per-color precomputed analysis data (.npy files) for a solving method,
-    picking whichever color gives the lowest total move count for each state.
+    Loads and merges per-color precomputed analysis data for a solving method (one array per
+    color inside results_dir/<method>.npz), picking whichever color gives the lowest total
+    move count for each state.
     """
-    method_dir = results_dir / method.lower()
+    path = results_dir / f"{method.lower()}.npz"
     color_data_list = []
-    for c in colors:
-        p = method_dir / f"{c}_data.npy"
-        if p.exists():
-            color_data_list.append(np.load(p))
+    if path.exists():
+        with np.load(path) as npz:
+            for c in colors:
+                if c in npz.files:
+                    color_data_list.append(npz[c])
 
     if not color_data_list:
-        raise FileNotFoundError(f"Could not find any .npy files for {method} in {method_dir}. Did you run solver.py?")
+        raise FileNotFoundError(f"Could not find any color data for {method} in {path}. Did you run solver.py?")
 
     merged_data = color_data_list[0].copy()
     step_names = [n for n in merged_data.dtype.names if n != 'depth']
