@@ -280,6 +280,101 @@ def plot_per_step_volume(viz, data_dict):
 
     viz.save_computed_csv("computed_per_step_pmf.csv", ["Method", "Step_Name", "Moves", "Count", "Percentage"], step_rows)
     
+def plot_config_pair_comparison(viz, pairs, name_a, name_b):
+    """
+    Compares two configs that analyze the same methods against the same state space (e.g.
+    cn_config vs. cn_config_cancellations) state-by-state rather than as two independent
+    distributions: `pairs[method_key]` holds each side's label/total-moves array over the
+    identical, index-aligned set of valid states, so `total_a - total_b` is an exact per-state
+    delta, not just two histograms eyeballed side by side.
+
+    Top row: one subplot per method, PMF of that per-state delta (0 = no difference between
+    the two configs at that state). Bottom: mean total moves under each config, per method, as
+    grouped bars.
+    """
+    n = len(pairs)
+    cols = min(4, n)
+    rows = (n + cols - 1) // cols
+    fig = plt.figure(figsize=(5 * cols, 4 * rows + 5))
+    gs = fig.add_gridspec(rows + 1, cols, height_ratios=[4] * rows + [3], hspace=0.45, wspace=0.3)
+
+    delta_rows, summary_rows = [], []
+
+    for i, (method_key, p) in enumerate(pairs.items()):
+        ax = fig.add_subplot(gs[i // cols, i % cols])
+        color = viz.method_colors.get(method_key, '#777777')
+
+        # delta = total_a - total_b isn't guaranteed non-negative for an arbitrary pair of
+        # configs (only for a config whose entries are strictly a cancellation-credited
+        # version of the other's), so bin over its actual range rather than assuming
+        # non-negative like _pmf's bincount does.
+        delta = p['delta']
+        lo, hi = int(delta.min()), int(delta.max())
+        bin_edges = np.arange(lo, hi + 2) - 0.5
+        counts, _ = np.histogram(delta, bins=bin_edges)
+        pcts = counts / len(delta) * 100
+        moves_axis = np.arange(lo, hi + 1)
+        ax.bar(moves_axis, pcts, color=color, edgecolor='black', alpha=0.85, width=0.8)
+        for moves, count, pct in zip(moves_axis, counts, pcts):
+            delta_rows.append([method_key, int(moves), int(count), pct])
+
+        mean_delta = np.mean(delta)
+        pct_improved = np.mean(delta > 0) * 100
+        ax.axvline(mean_delta, color='red', linestyle='--', label=f'Mean: {mean_delta:.2f}')
+        ax.set_title(f"{p['label_a']} vs {p['label_b']}", fontsize=10, fontweight='bold')
+        ax.set_xlabel("Moves Saved")
+        ax.set_ylabel("% of States")
+        ax.legend(fontsize='small', loc='upper right')
+        ax.grid(True, axis='y', alpha=0.2, linestyle='--')
+        ax.text(0.95, 0.75, f"{pct_improved:.1f}% of states\nimproved", transform=ax.transAxes,
+                ha='right', va='top', fontsize=8, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+
+        summary_rows.append([
+            method_key, p['label_a'], p['label_b'],
+            np.mean(p['total_a']), np.mean(p['total_b']), mean_delta,
+            pct_improved, int(delta.max()), len(delta)
+        ])
+
+    ax_bar = fig.add_subplot(gs[rows, :])
+    labels = list(pairs.keys())
+    x = np.arange(len(labels))
+    width = 0.35
+    means_a = [np.mean(pairs[m]['total_a']) for m in labels]
+    means_b = [np.mean(pairs[m]['total_b']) for m in labels]
+    colors = [viz.method_colors.get(m, '#777777') for m in labels]
+
+    ax_bar.bar(x - width / 2, means_a, width, color=colors, alpha=0.5, edgecolor='black', label=name_a)
+    ax_bar.bar(x + width / 2, means_b, width, color=colors, alpha=0.95, edgecolor='black', label=name_b)
+    for xi, (ma, mb) in enumerate(zip(means_a, means_b)):
+        ax_bar.text(xi - width / 2, ma, f"{ma:.2f}", ha='center', va='bottom', fontsize=8)
+        ax_bar.text(xi + width / 2, mb, f"{mb:.2f}", ha='center', va='bottom', fontsize=8)
+
+    ax_bar.set_xticks(x)
+    ax_bar.set_xticklabels(labels)
+    ax_bar.set_ylabel("Mean Total Moves")
+    ax_bar.set_title(f"Mean Total Moves: {name_a} vs {name_b}", fontweight='bold')
+    ax_bar.legend(loc='upper right')
+    ax_bar.grid(True, axis='y', alpha=0.2, linestyle='--')
+
+    fig.suptitle(f"Config Comparison: {name_a} vs {name_b}", fontsize=14, fontweight='bold', y=1.0)
+    viz.save_plot(fig, "config_comparison.png")
+
+    viz.save_computed_csv("computed_config_comparison_delta_pmf.csv",
+        ["Method", "Moves_Saved", "Count", "Percentage"], delta_rows)
+    viz.save_computed_csv("computed_config_comparison_summary.csv",
+        ["Method", "Label_A", "Label_B", "Mean_Total_A", "Mean_Total_B", "Mean_Moves_Saved",
+         "Pct_States_Improved", "Max_Moves_Saved", "N_States"], summary_rows)
+
+    print("\n" + "=" * 60)
+    print(f"CONFIG COMPARISON: {name_a} vs {name_b}")
+    print("=" * 60)
+    for row in summary_rows:
+        method_key, label_a, label_b, mean_a, mean_b, mean_delta, pct_improved, max_delta, n_states = row
+        print(f"\n{label_a}  vs  {label_b}:")
+        print(f"  Mean total moves: {mean_a:.2f} -> {mean_b:.2f}  (saved {mean_delta:.2f} avg)")
+        print(f"  {pct_improved:.1f}% of states improved, max saved at one state: {max_delta}")
+    print("-" * 60 + "\n")
+
 def plot_random_comparison_summary(viz, data_dict):
     """
     Creates a 3-panel summary plot (Violin, CDF, Boxplot) of random trial data,

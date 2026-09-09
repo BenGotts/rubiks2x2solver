@@ -1,25 +1,29 @@
 {
-  "name": "Color Neutral 2x2 Method Comparison",
+  "name": "Color Neutral 2x2 Method Comparison (With Cancellations)",
   "methods": [
     {
       "method": "lbl",
       "colors": ["W", "Y", "G", "B", "O", "R"],
-      "label": "LBL (CN)"
+      "label": "LBL (CN, Cancellations)",
+      "cancel_moves": true
     },
     {
       "method": "ortega",
       "colors": ["W", "Y", "G", "B", "O", "R"],
-      "label": "Ortega (CN)"
+      "label": "Ortega (CN, Cancellations)",
+      "cancel_moves": true
     },
     {
       "method": "cll",
       "colors": ["W", "Y", "G", "B", "O", "R"],
-      "label": "CLL (CN)"
+      "label": "CLL (CN, Cancellations)",
+      "cancel_moves": true
     },
     {
       "method": "eg",
       "colors": ["W", "Y", "G", "B", "O", "R"],
-      "label": "EG (CN)"
+      "label": "EG (CN, Cancellations)",
+      "cancel_moves": true
     }
   ]
 }

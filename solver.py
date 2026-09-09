@@ -197,6 +197,53 @@ def _build_transitions_kernel(moves_perm: np.ndarray, moves_twist: np.ndarray, m
     return transitions
 
 # ==========================================
+# MOVE CANCELLATION (free quarter-turn reduction across AUF/algorithm seams)
+# ==========================================
+
+def _build_rotation_face_maps() -> Dict[str, Dict[str, str]]:
+    """
+    For each whole-cube rotation, the face relabeling it induces: maps[rot][X] is the face
+    that, before applying `rot`, occupied whatever now sits at face X. Needed to translate a
+    move's nominal face (e.g. the 'R' in "x2 R U' ...") into its true physical face whenever a
+    rotation comes before it - either embedded in the same algorithm (a few PBL/CLL algs open
+    with x2/x') or inserted between steps (Ortega/EG choose a y-rotation before their second
+    algorithm) - so cancellation can compare moves correctly across that rotation instead of
+    just string-matching move letters.
+
+    Derived directly from pocket_cube's own rotation permutation/twist arrays (rather than
+    hand-derived) so it can't drift from what apply_rotation actually does: label the solved
+    cube's facelets by the face they belong to, apply the rotation, and read off which label
+    now sits at each face's representative facelet.
+    """
+    facename_lut = [[pocket_cube.CORNER_TO_FACES[piece][idx] for idx in range(3)] for piece in range(8)]
+    reps = {face: pocket_cube.FACELETS_2x2[face][0] for face in pocket_cube.FACE_ORDER}
+    identity_perm8 = np.arange(8)
+    identity_ori8 = np.zeros(8, dtype=int)
+
+    maps = {}
+    for rot_name, (rperm, rtwist) in pocket_cube.ROTATIONS.items():
+        p = identity_perm8[rperm]
+        o = (identity_ori8[rperm] + rtwist) % 3
+        maps[rot_name] = {
+            face: facename_lut[p[slot]][(idx + o[slot]) % 3]
+            for face, (slot, idx) in reps.items()
+        }
+    return maps
+
+_ROTATION_FACE_MAPS = _build_rotation_face_maps()
+
+def _move_face_residue(token: str) -> Tuple[str, int]:
+    """A move token's nominal face plus its turn count as an element of Z4 (quarter turns),
+    e.g. 'U'->('U',1), 'U2'->('U',2), "U'"->('U',3) - the representation _reduce_move_count
+    composes adjacent same-face turns in."""
+    face = token[0]
+    if token.endswith("'"):
+        return face, 3
+    if token.endswith('2'):
+        return face, 2
+    return face, 1
+
+# ==========================================
 # SOLVER BASE CLASS
 # ==========================================
 class Solver(pocket_cube.PocketCube, ABC):
@@ -357,6 +404,85 @@ class Solver(pocket_cube.PocketCube, ABC):
         p_inv = np.argsort(p)
         t_inv = (-t[p_inv]) % 3
         return p_inv, t_inv, c
+
+    def _external_tokens(self, alg: str, entering_frame: Dict[str, str]) -> Tuple[List[Tuple[str, int]], Dict[str, str]]:
+        """
+        Tokenizes `alg` (a raw move/rotation string, as stored in the algorithm JSON or one of
+        AUF_MOVES/Y_ROTS) into (physical_face, quarter_turns) pairs expressed in the frame
+        active before `alg` started (`entering_frame`), plus the frame left active afterward
+        (for whatever comes next). Rotation tokens don't emit a move token themselves - they
+        only update the running frame, via the same face-relabeling composition used by
+        _build_rotation_face_maps: frame_after[f] = frame_before[_ROTATION_FACE_MAPS[rot][f]].
+        """
+        frame = entering_frame
+        tokens: List[Tuple[str, int]] = []
+        for tok in alg.split():
+            if tok in self.ROTATIONS:
+                rmap = _ROTATION_FACE_MAPS[tok]
+                frame = {f: frame[rmap[f]] for f in pocket_cube.FACE_ORDER}
+            else:
+                face, residue = _move_face_residue(tok)
+                tokens.append((frame[face], residue))
+        return tokens, frame
+
+    @staticmethod
+    def _reduce_move_count(token_stream: List[Tuple[str, int]]) -> int:
+        """
+        Collapses a literal (physical_face, quarter_turns) stream via free quarter-turn
+        reduction: adjacent turns on the same physical face compose mod 4 (U U -> U2,
+        U U' -> nothing, U2 U -> U', ...), cascading outward whenever a cancellation exposes a
+        new adjacent same-face pair - exactly the reduction a fluent solver's hands perform on
+        two abutting move sequences without conscious thought. Returns the number of physical
+        (HTM) moves left after full reduction - a merged double/quarter turn still costs 1,
+        same as everywhere else in this codebase.
+        """
+        stack: List[Tuple[str, int]] = []
+        for face, residue in token_stream:
+            while stack and stack[-1][0] == face:
+                residue = (residue + stack.pop()[1]) % 4
+            if residue != 0:
+                stack.append((face, residue))
+        return len(stack)
+
+    def _solve_cost(self, pieces: List[str]) -> int:
+        """
+        The true physical (HTM) move count for a sequence of AUF/rotation/algorithm strings
+        executed back-to-back (in order), after free reduction across every seam between them -
+        not just the sum of each piece's own move count in isolation. See _reduce_move_count.
+        """
+        frame = {f: f for f in pocket_cube.FACE_ORDER}
+        tokens: List[Tuple[str, int]] = []
+        for piece in pieces:
+            toks, frame = self._external_tokens(piece, frame)
+            tokens.extend(toks)
+        return self._reduce_move_count(tokens)
+
+    D_LAYER_ROTATIONS = ("D", "D'", "D2")
+
+    def _best_with_layer_rotation(self, p_norm: np.ndarray, o_norm: np.ndarray, baseline_reduced: int, solve_and_reduce) -> int:
+        """
+        The intuitively-built face/layer can, at zero extra physical cost, be finished in any
+        of the 4 D-layer rotations of wherever normalize_to_d happened to land it:
+        is_face_solved and is_layer_solved are both invariant under D/D'/D2 (empirically
+        verified - a D turn only permutes the already-solved layer's corners among each other,
+        which stay mutually matched since the whole belt was already uniform). There was never
+        a separate physical move for this: the layer-building step ends directly in whichever
+        of the 4 configurations it's aimed at, so - unlike pre_auf/mid_auf/post_auf - none of
+        them cost anything to reach. A solver who isn't looking for this just goes with
+        whichever one they happened to finish in (`baseline_reduced`, i.e. D=""); noticing the
+        freedom lets them aim for whichever one lets the next algorithm(s) run cheapest.
+
+        `solve_and_reduce(p, o)` must run this method's normal downstream solve from an
+        already-normalized (possibly D-rotated) state and return its reduced move count (see
+        _solve_cost), or None if that state fails to solve.
+        """
+        best = baseline_reduced
+        for d_rot in self.D_LAYER_ROTATIONS:
+            p_d, o_d = self._apply_move(p_norm, o_norm, d_rot)
+            candidate = solve_and_reduce(p_d, o_d)
+            if candidate is not None and candidate < best:
+                best = candidate
+        return best
 
     def _solved_orbit(self) -> List[Tuple[np.ndarray, np.ndarray]]:
         """
@@ -539,7 +665,7 @@ class Solver(pocket_cube.PocketCube, ABC):
             seeds_dir = Path(DEFAULT_SEEDS_DIR)
 
         structural_steps = [step["name"].lower() for step in self.steps]
-        step_names = structural_steps + ['pre_auf', 'mid_auf', 'post_auf']
+        step_names = structural_steps + ['pre_auf', 'mid_auf', 'post_auf', 'reduced_savings']
         dt = np.dtype([('depth', 'i1')] + [(name, 'i1') for name in step_names])
 
         color_data = {c: np.full(max_states, -1, dtype=dt) for c in pocket_cube.COLOR_NEUTRAL}

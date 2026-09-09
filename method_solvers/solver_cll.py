@@ -32,9 +32,19 @@ class CLLSolver(Solver):
             return {'success': False, 'error': 'Layer not solved'}
         
         # Step 2: Solve CLL (1-Look Last Layer)
-        pre_auf, cll_moves, post_auf = self._solve_cll(p_norm, o_norm)
+        pre_auf, cll_moves, post_auf, pre_auf_str, cll_str, post_auf_str = self._solve_cll(p_norm, o_norm)
         if cll_moves == -1: return {'success': False, 'error': 'CLL Fail'}
-        
+
+        naive_total = pre_auf + cll_moves + post_auf
+        reduced_total = self._solve_cost([pre_auf_str, cll_str, post_auf_str])
+
+        def _reduced_from(p, o):
+            pre_, cll_, post_, pre_str_, cll_str_, post_str_ = self._solve_cll(p, o)
+            if cll_ == -1: return None
+            return self._solve_cost([pre_str_, cll_str_, post_str_])
+
+        reduced_total = self._best_with_layer_rotation(p_norm, o_norm, reduced_total, _reduced_from)
+
         return {
             'success': True,
             'moves': {
@@ -42,40 +52,41 @@ class CLLSolver(Solver):
                 'pre_auf': pre_auf,
                 'cll': cll_moves,
                 'mid_auf': 0,     # CLL is a 1-look method
-                'post_auf': post_auf
+                'post_auf': post_auf,
+                'reduced_savings': naive_total - reduced_total,
             }
         }
-    
-    def _get_post_auf_cost(self, perm8: np.ndarray, ori8: np.ndarray) -> int:
+
+    def _get_post_auf_cost(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, str]:
         """Helper to find how many U moves it takes to align the solved cube."""
-        for compiled_auf in self.compiled_auf:
+        for post_str, compiled_auf in zip(self.AUF_MOVES, self.compiled_auf):
             p1, o1, cost = self._apply_compiled(perm8, ori8, compiled_auf)
             if self.is_solved_state(p1, o1):
-                return cost
-        return -1
+                return cost, post_str
+        return -1, ""
 
-    def _solve_cll(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, int, int]:
+    def _solve_cll(self, perm8: np.ndarray, ori8: np.ndarray) -> Tuple[int, int, int, str, str, str]:
         """
         Solve CLL and extract Pre-AUF and Post-AUF costs.
 
         Returns:
-            (pre_auf_cost, cll_alg_cost, post_auf_cost)
+            (pre_auf_cost, cll_alg_cost, post_auf_cost, pre_auf_str, cll_alg_str, post_auf_str)
         """
         # 1. Check for CLL Skip
-        skip_cost = self._get_post_auf_cost(perm8, ori8)
+        skip_cost, skip_str = self._get_post_auf_cost(perm8, ori8)
         if skip_cost != -1:
-            return 0, 0, skip_cost
+            return 0, 0, skip_cost, "", "", skip_str
 
         # 2. Try Pre-AUF (U) + Algorithm + Post-AUF (U)
-        for pre_compiled in self.compiled_auf:
+        for pre_str, pre_compiled in zip(self.AUF_MOVES, self.compiled_auf):
             p_pre, o_pre, pre_cost = self._apply_compiled(perm8, ori8, pre_compiled)
 
-            for compiled in self.compiled_algorithms.get('cll', {}).values():
+            for name, compiled in self.compiled_algorithms.get('cll', {}).items():
                 p_alg, o_alg, alg_cost = self._apply_compiled(p_pre, o_pre, compiled)
 
                 # Check if the algorithm solved the cube
-                post_cost = self._get_post_auf_cost(p_alg, o_alg)
+                post_cost, post_str = self._get_post_auf_cost(p_alg, o_alg)
                 if post_cost != -1:
-                    return pre_cost, alg_cost, post_cost
+                    return pre_cost, alg_cost, post_cost, pre_str, self.algorithms['cll'][name], post_str
 
-        return -1, -1, -1
+        return -1, -1, -1, "", "", ""

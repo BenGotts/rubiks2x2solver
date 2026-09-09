@@ -46,15 +46,15 @@ class RandomSolver:
             colors = m.get('colors', ['W', 'Y', 'G', 'B', 'R', 'O'])
             
             logger.info(f"Loading precomputed data for {label}...")
-            data = self.load_optimal_data(m_key, colors)
+            data = self.load_optimal_data(m_key, colors, cancel_moves=m.get('cancel_moves', False))
             self.method_data[label] = data
             
             step_names = [n for n in data.dtype.names if n not in pocket_cube.NON_STEP_FIELDS]
             self.first_steps[label] = step_names[0] if step_names else 'unknown'
 
-    def load_optimal_data(self, method: str, colors: List[str]) -> np.ndarray:
+    def load_optimal_data(self, method: str, colors: List[str], cancel_moves: bool = False) -> np.ndarray:
         """Loads and merges color neutral data, identical to visualizer.py logic."""
-        return pocket_cube.load_optimal_data(self.results_dir, method, colors)
+        return pocket_cube.load_optimal_data(self.results_dir, method, colors, cancel_moves=cancel_moves)
 
     def find_base_state(self, start_state_id: int) -> Tuple[int, int]:
         """

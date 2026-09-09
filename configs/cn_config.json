@@ -1,0 +1,25 @@
+{
+  "name": "Color Neutral 2x2 Method Comparison",
+  "methods": [
+    {
+      "method": "lbl",
+      "colors": ["W", "Y", "G", "B", "O", "R"],
+      "label": "LBL (CN)"
+    },
+    {
+      "method": "ortega",
+      "colors": ["W", "Y", "G", "B", "O", "R"],
+      "label": "Ortega (CN)"
+    },
+    {
+      "method": "cll",
+      "colors": ["W", "Y", "G", "B", "O", "R"],
+      "label": "CLL (CN)"
+    },
+    {
+      "method": "eg",
+      "colors": ["W", "Y", "G", "B", "O", "R"],
+      "label": "EG (CN)"
+    }
+  ]
+}

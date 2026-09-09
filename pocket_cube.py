@@ -18,8 +18,11 @@ RED = 'R'
 
 COLOR_NEUTRAL = (WHITE, YELLOW, GREEN, BLUE, ORANGE, RED)
 
-# Analysis dtype fields that are not per-step move counts (see solver.Solver.run_analysis)
-NON_STEP_FIELDS = ('depth', 'pre_auf', 'mid_auf', 'post_auf')
+# Analysis dtype fields that are not per-step move counts (see solver.Solver.run_analysis).
+# 'reduced_savings' is doubly not a step: it's not a move count at all, it's how many fewer
+# moves are needed once move cancellations are credited, than the naive sum of every other
+# field (see load_optimal_data).
+NON_STEP_FIELDS = ('depth', 'pre_auf', 'mid_auf', 'post_auf', 'reduced_savings')
 
 # State space size
 N_STATES = math.factorial(7) * (3**6)
@@ -298,11 +301,23 @@ class PocketCube:
                 s[20] == s[21] == s[22] == s[23])
 
 
-def load_optimal_data(results_dir: Path, method: str, colors: List[str]) -> np.ndarray:
+def load_optimal_data(results_dir: Path, method: str, colors: List[str], cancel_moves: bool = False) -> np.ndarray:
     """
     Loads and merges per-color precomputed analysis data for a solving method (one array per
     color inside results_dir/<method>.npz), picking whichever color gives the lowest total
     move count for each state.
+
+    cancel_moves: credits 'reduced_savings' (see solver.Solver._solve_cost /
+    _best_with_layer_rotation) against the total instead of ignoring it. That field is how
+    many fewer physical moves the solve actually takes once move cancellations are found -
+    adjacent turns across AUF/algorithm seams left to cancel (e.g. a pre_auf 'U2' immediately
+    followed by an algorithm that itself opens with 'U2' - the two make each other disappear,
+    not just the AUF), plus picking whichever of the 4 D-layer rotations the untracked
+    face/layer-building step could have landed in for free - versus the naive move count that
+    treats every AUF and algorithm as an independently fixed cost, with no D-layer freedom.
+    Anyone can find these given enough time to look; cancel_moves models whether that time was
+    spent. Folding it in before picking the best color (rather than after merging) matters
+    because it can change which color gives the lowest total for a given state.
     """
     path = results_dir / f"{method.lower()}.npz"
     color_data_list = []
@@ -316,24 +331,31 @@ def load_optimal_data(results_dir: Path, method: str, colors: List[str]) -> np.n
         raise FileNotFoundError(f"Could not find any color data for {method} in {path}. Did you run solver.py?")
 
     merged_data = color_data_list[0].copy()
-    step_names = [n for n in merged_data.dtype.names if n != 'depth']
+    cost_steps = [n for n in merged_data.dtype.names if n not in ('depth', 'reduced_savings')]
+    has_savings = 'reduced_savings' in merged_data.dtype.names
     n_colors, N = len(color_data_list), len(merged_data)
 
     totals = np.full((n_colors, N), np.inf)
     for i, data in enumerate(color_data_list):
         valid_mask = data['depth'] >= 0
         total_moves = np.zeros(N)
-        for step in step_names:
+        for step in cost_steps:
             total_moves += data[step]
+        if cancel_moves and has_savings:
+            total_moves = total_moves - data['reduced_savings']
         totals[i, valid_mask] = total_moves[valid_mask]
 
     best_idx = np.argmin(totals, axis=0)
     best_total = np.min(totals, axis=0)
+    valid_mask = np.isfinite(best_total)
 
-    for step in step_names:
+    merge_fields = cost_steps + (['reduced_savings'] if has_savings else [])
+    for step in merge_fields:
         stacked = np.vstack([d[step] for d in color_data_list])
         chosen = stacked[best_idx, np.arange(N)]
-        chosen[~np.isfinite(best_total)] = -1
+        chosen[~valid_mask] = -1
+        if step == 'reduced_savings' and not cancel_moves:
+            chosen[valid_mask] = 0
         merged_data[step] = chosen
 
     return merged_data
